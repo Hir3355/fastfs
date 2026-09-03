@@ -4,8 +4,20 @@ param()
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $moduleManifest = Join-Path $projectRoot 'dist\FastFs\FastFs.psd1'
+$thirdPartyNotices = Join-Path $projectRoot 'dist\FastFs\THIRD_PARTY_NOTICES.md'
+$rustStdCopyright = Join-Path $projectRoot 'dist\FastFs\RUST-STDLIB-COPYRIGHT.html'
 $targetRoot = [IO.Path]::GetFullPath((Join-Path $projectRoot 'target'))
 $fixtureRoot = [IO.Path]::GetFullPath((Join-Path $targetRoot 'smoke-fixture'))
+
+foreach ($noticePath in @($thirdPartyNotices, $rustStdCopyright)) {
+    if (-not (Test-Path -LiteralPath $noticePath -PathType Leaf)) {
+        throw "配布用のライセンス通知が見つかりません: $noticePath"
+    }
+}
+$thirdPartyText = [IO.File]::ReadAllText($thirdPartyNotices)
+if (-not $thirdPartyText.Contains('UNICODE, INC. LICENSE AGREEMENT - DATA FILES AND SOFTWARE')) {
+    throw 'Unicodeライセンスが第三者通知に含まれていません'
+}
 
 if (-not $fixtureRoot.StartsWith(
     $targetRoot + [IO.Path]::DirectorySeparatorChar,

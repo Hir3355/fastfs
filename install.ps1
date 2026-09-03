@@ -38,7 +38,8 @@ foreach ($name in @(
     'fastfs.dll',
     'FastFs.psd1',
     'LICENSE',
-    'THIRD_PARTY_NOTICES.md'
+    'THIRD_PARTY_NOTICES.md',
+    'RUST-STDLIB-COPYRIGHT.html'
 )) {
     Copy-Item -LiteralPath (Join-Path $sourceDirectory $name) -Destination $destination
 }

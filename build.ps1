@@ -32,11 +32,21 @@ if (Test-Path -LiteralPath $obsoleteFormatFile) {
 }
 $managedOutput = Join-Path $projectRoot "powershell\FastFs.PowerShell\bin\$Configuration\net10.0"
 $rustLibrary = Join-Path $projectRoot "target\$rustProfile\fastfs.dll"
+$rustSysroot = (& rustc --print sysroot).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($rustSysroot)) {
+    throw 'Rustツールチェーンのsysrootを取得できませんでした'
+}
+$rustStdCopyright = Join-Path $rustSysroot 'share\doc\rust\COPYRIGHT-library.html'
+if (-not (Test-Path -LiteralPath $rustStdCopyright -PathType Leaf)) {
+    throw "Rust標準ライブラリの著作権通知が見つかりません: $rustStdCopyright。Rustのドキュメントコンポーネントをインストールしてください"
+}
 
 Copy-Item -LiteralPath $rustLibrary -Destination $moduleDirectory
 Copy-Item -LiteralPath (Join-Path $managedOutput 'FastFs.PowerShell.dll') -Destination $moduleDirectory
 Copy-Item -LiteralPath (Join-Path $projectRoot 'powershell\FastFs.PowerShell\FastFs.psd1') -Destination $moduleDirectory
 Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination $moduleDirectory
 Copy-Item -LiteralPath (Join-Path $projectRoot 'THIRD_PARTY_NOTICES.md') -Destination $moduleDirectory
+Copy-Item -LiteralPath $rustStdCopyright `
+    -Destination (Join-Path $moduleDirectory 'RUST-STDLIB-COPYRIGHT.html')
 
 Write-Output "FastFs モジュールを生成しました: $moduleDirectory"
