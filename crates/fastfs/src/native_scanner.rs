@@ -995,7 +995,7 @@ impl NativeScanner {
     }
 }
 
-/// Wraps any reader and turns a shared cancellation request into an interrupt.
+/// Wraps any reader and turns a shared cancellation request into a terminal I/O error.
 pub(crate) struct CancelReader<'a, R> {
     inner: R,
     cancelled: Option<&'a AtomicBool>,
@@ -1011,10 +1011,7 @@ impl<'a, R> CancelReader<'a, R> {
 impl<R: Read> Read for CancelReader<'_, R> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         if is_cancelled(self.cancelled) {
-            return Err(io::Error::new(
-                io::ErrorKind::Interrupted,
-                "FastFs rg search cancelled",
-            ));
+            return Err(cancellation_error());
         }
         self.inner.read(buffer)
     }
@@ -1023,10 +1020,7 @@ impl<R: Read> Read for CancelReader<'_, R> {
 impl<R: Seek> Seek for CancelReader<'_, R> {
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         if is_cancelled(self.cancelled) {
-            return Err(io::Error::new(
-                io::ErrorKind::Interrupted,
-                "FastFs rg search cancelled",
-            ));
+            return Err(cancellation_error());
         }
         self.inner.seek(position)
     }
@@ -1039,10 +1033,7 @@ fn stream_contains_nul<R: Read>(
     let mut buffer = [0_u8; 8 * 1024];
     loop {
         if is_cancelled(cancelled) {
-            return Err(io::Error::new(
-                io::ErrorKind::Interrupted,
-                "FastFs rg search cancelled",
-            ));
+            return Err(cancellation_error());
         }
         let read = reader.read(&mut buffer)?;
         if read == 0 {
@@ -1052,6 +1043,11 @@ fn stream_contains_nul<R: Read>(
             return Ok(true);
         }
     }
+}
+
+fn cancellation_error() -> io::Error {
+    // `BufRead` transparently retries `Interrupted`; cancellation is terminal.
+    io::Error::other("FastFs rg search cancelled")
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1599,12 +1595,12 @@ fn append_char(character: char, output: &mut Vec<u8>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        BinaryDetection, LineMatcher, LineSink, NativeScanner, ScanControl, ScanLine, ScanMode,
-        ScannerOptions,
+        BinaryDetection, CancelReader, LineMatcher, LineSink, NativeScanner, ScanControl, ScanLine,
+        ScanMode, ScannerOptions,
     };
     use crate::native_matcher::{MatchRange, MatcherOptions, NativeMatcher};
     use std::cell::Cell;
-    use std::io::{self, Cursor, Read, Seek, SeekFrom};
+    use std::io::{self, BufRead, BufReader, Cursor, Read, Seek, SeekFrom};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -1839,6 +1835,22 @@ mod tests {
         calls: Cell<usize>,
     }
 
+    struct CancelDuringRead<'a> {
+        cancelled: &'a AtomicBool,
+        calls: &'a Cell<usize>,
+    }
+
+    impl Read for CancelDuringRead<'_> {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            self.calls.set(self.calls.get() + 1);
+            let bytes = b"unterminated";
+            let length = buffer.len().min(bytes.len());
+            buffer[..length].copy_from_slice(&bytes[..length]);
+            self.cancelled.store(true, Ordering::Relaxed);
+            Ok(length)
+        }
+    }
+
     impl LineMatcher for CancellingMatcher<'_> {
         fn supports_block_search(&self) -> bool {
             true
@@ -2026,6 +2038,25 @@ mod tests {
         assert!(result.cancelled);
         assert_eq!(matcher.calls.get(), 1);
         assert!(sink.events.is_empty());
+    }
+
+    #[test]
+    fn buffered_line_read_does_not_retry_a_cancellation_forever() {
+        let cancelled = AtomicBool::new(false);
+        let calls = Cell::new(0);
+        let source = CancelDuringRead {
+            cancelled: &cancelled,
+            calls: &calls,
+        };
+        let mut reader = BufReader::with_capacity(4, CancelReader::new(source, Some(&cancelled)));
+        let mut line = Vec::new();
+
+        let error = reader
+            .read_until(b'\n', &mut line)
+            .expect_err("cancellation must terminate read_until");
+
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+        assert_eq!(calls.get(), 1);
     }
 
     #[test]

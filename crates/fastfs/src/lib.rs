@@ -164,6 +164,7 @@ pub unsafe extern "system" fn fastfs_execute_v3(
     unsafe { execute_ffi(request, request_len, callback, context, cancellation) }
 }
 
+#[inline(never)]
 unsafe fn execute_ffi(
     request: *const u8,
     request_len: usize,

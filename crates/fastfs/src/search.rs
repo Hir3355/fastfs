@@ -411,6 +411,7 @@ fn search_parallel_walk(
                         &output_gate,
                         &stopped,
                     ) {
+                        Ok(()) if stopped.load(Ordering::Relaxed) => WalkControl::Quit,
                         Ok(()) => WalkControl::Continue,
                         Err(_) if stopped.load(Ordering::Relaxed) => WalkControl::Quit,
                         Err(error) => send_worker_message(
@@ -513,6 +514,7 @@ fn search_paths(
                         &output_gate,
                         &stopped,
                     ) {
+                        Ok(()) if stopped.load(Ordering::Relaxed) => break,
                         Ok(()) => {}
                         Err(_) if stopped.load(Ordering::Relaxed) => break,
                         Err(error) => {
