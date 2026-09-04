@@ -3,16 +3,21 @@
 FastFs は、Rust のファイル操作を PowerShell プロセス内で実行する Windows 向けモジュールです。`fastfs` で Linux 風のファイル操作と高速なテキスト検索を使えるようになります。
 通常のコマンドとしてだけでなく、Claude Code や Codex などのコーディングエージェント向けツールとしても使えます。
 
-## ビルドと導入
+## インストール
 
 PowerShell 7.6以降が必要です。
-ソースからビルドする場合は、Rustと.NET 10 SDKも必要です。
+
+```powershell
+irm https://github.com/Hir3355/fastfs/releases/latest/download/install-release.ps1 | iex
+```
+
+ソースからビルドする場合は、Rustと.NET 10 SDKを用意し、リポジトリ内で次のコマンドを実行します。
 
 ```powershell
 pwsh -NoProfile -File .\install.ps1
 ```
 
-グローバル導入したFastFsの全バージョンは、次のコマンドで削除できます。
+グローバル導入したFastFsの全バージョンは、リポジトリ内で次のコマンドを実行すると削除できます。
 
 ```powershell
 pwsh -NoProfile -File .\uninstall.ps1
